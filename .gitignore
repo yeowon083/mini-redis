@@ -1,0 +1,32 @@
+# Local specification and planning documents
+.docs/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.ipynb_checkpoints/
+
+# Python environments and package/build artifacts
+.venv/
+venv/
+env/
+ENV/
+.tox/
+.nox/
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test coverage output
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
