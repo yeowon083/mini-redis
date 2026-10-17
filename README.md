@@ -3,21 +3,91 @@
 해시맵, 이중 연결 리스트, 최소 힙을 직접 구현하며 만드는 CLI 저장소입니다.
 Python 3.8 이상을 대상으로 하며 외부 패키지 설치는 필요하지 않습니다.
 
-## 현재 상태
+## 실행하기
 
-Phase 5: 기본 자료구조와 String 저장소 API, LRU, 메모리 제한과 TTL을 구현했습니다.
-현재 모듈을 실행하면 준비 상태를 출력하고 종료합니다. CLI 명령 입력은 Phase 6에서 연결합니다.
+필수 Phase 1~6의 제품 기능을 구현했습니다. 문자열 저장, LRU 메모리 축출과 TTL 만료를
+터미널에서 사용할 수 있습니다. Python 3.8 호환 문법을 사용하며 실제 검증 환경과 결과는
+아래 테스트 안내를 참고하세요.
 
 저장소 루트에서 실행합니다.
 
 ```console
 python -m mini_redis
-python -m unittest discover -s tests -v
 ```
+
+`mini-redis> ` 뒤에 명령을 입력합니다. `exit`, `quit`, EOF 또는 Ctrl+C로 종료합니다.
+빈 입력은 무시합니다. 명령과 CONFIG/INFO의 하위 이름은 대소문자를 구분하지 않으며,
+키와 값은 입력한 대소문자를 유지합니다. `exit`와 `quit`에는 인자를 붙이지 않습니다.
+
+```console
+mini-redis> SET user:1 "Alice Kim"
+OK
+mini-redis> GET user:1
+"Alice Kim"
+mini-redis> EXISTS user:1
+(integer) 1
+mini-redis> EXPIRE user:1 60
+(integer) 1
+mini-redis> SET user:1 Bob
+OK
+mini-redis> TTL user:1
+(integer) -1
+mini-redis> DEL user:1
+(integer) 1
+mini-redis> GET user:1
+(nil)
+mini-redis> quit
+```
+
+## 명령과 출력
+
+| 명령 형식 | 결과 |
+| --- | --- |
+| `SET key value` | 저장 또는 덮어쓰기 후 `OK` |
+| `GET key` | 큰따옴표로 감싼 값, 없는 키는 `(nil)` |
+| `DEL key` | 삭제했으면 `(integer) 1`, 없으면 `(integer) 0` |
+| `EXISTS key` | 있으면 `(integer) 1`, 없으면 `(integer) 0` |
+| `DBSIZE` | 살아 있는 키 수 |
+| `KEYS` | 번호와 큰따옴표를 붙인 전체 키 목록, 없으면 `(empty array)` |
+| `CONFIG SET maxmemory bytes` | 0 이상의 바이트 제한 설정 후 `OK`, 0은 무제한 |
+| `INFO memory` | `used_memory`, `maxmemory`, `evicted_keys`를 줄별로 출력 |
+| `EXPIRE key seconds` | 만료 설정 또는 즉시 삭제 1, 없는 키 0 |
+| `TTL key` | 없는 키 -2, 무기한 -1, 남은 초 내림 |
+
+숫자 결과에는 `(integer)`를 붙입니다. KEYS는 순서를 보장하지 않으며 인자나 패턴을 받지 않습니다.
+DEL과 EXISTS도 한 번에 키 하나만 받습니다. GET/KEYS 출력은 JSON 문자열 표기처럼 따옴표,
+역슬래시와 제어 문자를 이스케이프하고 한글은 그대로 표시합니다.
+
+입력은 표준 라이브러리 `shlex.split` 규칙을 따릅니다. 공백을 포함한 키나 값은 작은따옴표나
+큰따옴표로 감싸며, 빈 문자열은 `""`로 입력합니다. 예를 들어 `SET note 'say "hello"'`는
+따옴표를 포함한 값을 저장합니다. 닫히지 않은 따옴표나 끝의 불완전한 역슬래시는 구문 오류입니다.
+셸 스타일 파서이므로 입력의 `\n`을 줄바꿈 문자로 자동 변환하지 않습니다.
+
+정수는 선택적인 `+`/`-` 뒤의 ASCII 숫자만 허용하며 범위는 -2^63부터 2^63-1까지입니다.
+실수, 밑줄과 비 ASCII 숫자는 거절합니다. EXPIRE는 음수를 허용하고 0 이하이면 즉시 삭제합니다.
+CONFIG의 메모리 제한에는 음수를 사용할 수 없습니다.
+
+```console
+mini-redis> HELLO
+(error) ERR unknown command 'HELLO'
+mini-redis> GET
+(error) ERR wrong number of arguments for 'GET' command
+mini-redis> EXPIRE name later
+(error) ERR value is not an integer or out of range
+mini-redis> INFO other
+(error) ERR syntax error
+mini-redis> CONFIG SET maxmemory 4
+OK
+mini-redis> SET name Alice
+(error) OOM command not allowed when used_memory > 'maxmemory'
+```
+
+인자 수를 먼저 확인한 뒤 하위 이름과 정수 값을 검증합니다. 알 수 없는 명령, 인자 수 오류,
+잘못된 정수나 따옴표는 저장소를 변경하지 않으며 오류를 출력한 뒤 다음 입력을 받습니다.
 
 ## 구현 순서와 구조
 
-| Phase | 작업 | 구현할 모듈 |
+| Phase | 작업 | 구현 모듈 |
 | --- | --- | --- |
 | 1 | 최소 실행 구조와 동작 규칙 | `mini_redis/__main__.py`, `tests/` |
 | 2 | 연결 리스트, 체이닝 해시맵, 최소 힙 | `mini_redis/structures/linked_list.py`, `hash_map.py`, `min_heap.py` |
@@ -26,8 +96,7 @@ python -m unittest discover -s tests -v
 | 5 | TTL과 만료 정리 | `mini_redis/store.py` |
 | 6 | 명령 해석, 결과 출력, REPL | `mini_redis/cli.py` |
 
-예정 모듈은 해당 기능을 구현할 때 추가합니다. 자료구조는 입출력을 담당하지 않고,
-저장소는 데이터를 관리하며, CLI는 입력과 출력만 담당합니다.
+자료구조는 입출력을 담당하지 않고, 저장소는 데이터를 관리하며, CLI는 입력 검증과 출력을 담당합니다.
 
 ## 기본 자료구조
 
@@ -45,7 +114,7 @@ python -m unittest discover -s tests -v
 ## 저장소 API
 
 `mini_redis.store.MiniRedis`는 문자열 키와 값을 받습니다.
-아직 CLI 입력은 연결하지 않았으며 Python 코드에서 사용할 수 있습니다.
+CLI 외에 Python 코드에서도 사용할 수 있습니다.
 
 ```python
 from mini_redis.store import MiniRedis
@@ -121,6 +190,46 @@ print(store.ttl("user:1"))  # -1: SET으로 만료 설정 해제
 현재 유효한 만료 설정만 모아 힙을 다시 만들며, 키가 하나도 없으면 힙도 비웁니다.
 보통은 기한이 지난 힙 기록만 확인하고, 재구성할 때만 전체 키를 순회합니다.
 재구성은 O(n log n)이므로 모든 명령이 O(1)인 것은 아닙니다.
+
+## 시간 복잡도
+
+아래는 키와 값의 길이를 고정했을 때 만료 정리·축출·힙 재구성을 제외한 평균 비용입니다.
+`n`은 저장된 키 수, `h`는 유효하지 않은 기록도 포함한 TTL 힙 크기입니다.
+
+| 작업 | 비용 |
+| --- | --- |
+| GET / EXISTS / TTL / DEL / SET | 평균 O(1), 해시 충돌이 몰리면 O(n) |
+| DBSIZE / CONFIG / INFO | O(1) |
+| KEYS | O(n) |
+| EXPIRE (양수) | O(log h), 키 조회는 평균 O(1) |
+| LRU 최근 위치 이동 / 키 하나 축출 | 평균 O(1) |
+| TTL 힙 기록 하나 정리 | O(log h), 키 조회는 평균 O(1) |
+| TTL 힙 재구성 | 평균 O(n log n) |
+
+모든 공개 저장소 명령은 만료 정리를 먼저 수행하므로, 만료가 몰리면 한 번에 여러 키를 지웁니다.
+SET은 제한에 맞을 때까지 여러 키를 축출할 수 있으며 명령 도중 TTL 힙 재구성도 발생할 수 있습니다.
+문자열 해싱·UTF-8 바이트 계산·입출력에는 문자열 길이에 비례하는 비용이 추가됩니다.
+
+## 범위와 제약
+
+단일 프로세스의 대화형 String 저장소입니다. 네트워크 서버, Redis 프로토콜, 파일 저장,
+백그라운드 만료 작업, 동시 접근, 패턴 검색과 다중 키 명령은 제공하지 않습니다.
+프로그램을 종료하면 데이터가 사라집니다. 메모리 제한은 Python 프로세스의 실제 메모리 사용량이
+아닌 키와 값의 UTF-8 바이트 합계에 적용합니다. `dict`, `set`, `collections`, `heapq`로
+필수 자료구조를 대신하지 않으며 외부 실행 의존성도 없습니다.
+
+## 테스트하기
+
+저장소 루트에서 표준 라이브러리 unittest로 전체 테스트를 실행합니다.
+
+```console
+python -m unittest discover -s tests -v
+```
+
+자료구조의 충돌·확장·노드 연결, 저장소의 UTF-8 메모리·OOM·LRU·TTL, CLI 입력과 출력을
+검증합니다. TTL 테스트는 실제 대기 대신 제어 가능한 시계를 사용합니다.
+Python 3.12에서 실행 검증하며, Python 3.8은 호환 문법을 검사한 대상입니다.
+실제 Python 3.8 런타임 검증은 아직 수행하지 않았습니다.
 
 ## 개발 원칙
 

@@ -1,5 +1,6 @@
 """패키지가 독립 프로세스에서 안전하게 시작되는지 확인한다."""
 
+import os
 import subprocess
 import sys
 import unittest
@@ -40,3 +41,25 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, b"")
         self.assertEqual(result.stderr, b"")
+
+    def test_real_process_runs_unicode_commands_and_recovers_from_errors(self) -> None:
+        environment = os.environ.copy()
+        environment["PYTHONIOENCODING"] = "utf-8"
+        result = subprocess.run(
+            [sys.executable, "-m", "mini_redis"],
+            cwd=PROJECT_ROOT,
+            env=environment,
+            input='SET 이름 "홍 길동"\nGET 이름\nNOPE\nSET x\nEXPIRE 이름 nope\nGET 이름\nquit\nSET ignored value\n',
+            encoding="utf-8",
+            capture_output=True,
+            timeout=PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.stdout, (
+            'mini-redis> OK\nmini-redis> "홍 길동"\n'
+            "mini-redis> (error) ERR unknown command 'NOPE'\n"
+            "mini-redis> (error) ERR wrong number of arguments for 'SET' command\n"
+            "mini-redis> (error) ERR value is not an integer or out of range\n"
+            'mini-redis> "홍 길동"\nmini-redis> '
+        ))
