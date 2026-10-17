@@ -1,9 +1,10 @@
 """만료 시각이 가장 빠른 항목을 찾는 배열 기반 최소 힙."""
 
-from typing import List, Optional, Tuple
+from fractions import Fraction
+from typing import List, Optional, Tuple, Union
 
 
-Expiration = Tuple[float, str]
+Expiration = Tuple[Union[float, Fraction], str]
 
 
 class MinHeap:

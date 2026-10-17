@@ -2,6 +2,7 @@
 
 import math
 import time
+from fractions import Fraction
 from typing import Callable, List, Optional
 
 from .structures.hash_map import HashMap
@@ -28,7 +29,7 @@ class Entry:
         self.key = key
         self.value = value
         self.lru_node = lru_node
-        self.expire_at: Optional[float] = None
+        self.expire_at: Optional[Fraction] = None
 
 
 def _entry_size(key: str, value: str) -> int:
@@ -48,9 +49,13 @@ class MiniRedis:
         self.maxmemory = UNLIMITED_MEMORY
         self.evicted_keys = 0
 
+    def _current_time(self) -> Fraction:
+        """시계를 한 번 읽고, 반환된 초 값을 추가 반올림 없이 보관한다."""
+        return Fraction(self._clock())
+
     def set(self, key: str, value: str) -> None:
         """저장한 키를 최근 사용으로 표시하고, 제한 초과분은 오래된 키부터 지운다."""
-        self._remove_expired_entries(self._clock())
+        self._remove_expired_entries(self._current_time())
         new_size = _entry_size(key, value)
         # 저장 자체가 불가능하면 기존 값과 사용 순서를 바꾸지 않는다.
         if self.maxmemory != UNLIMITED_MEMORY and new_size > self.maxmemory:
@@ -73,7 +78,7 @@ class MiniRedis:
 
     def get(self, key: str) -> Optional[str]:
         """값을 반환한다. 없는 키는 None이며 빈 문자열과 구분한다."""
-        self._remove_expired_entries(self._clock())
+        self._remove_expired_entries(self._current_time())
         entry = self._entries.get(key)
         if entry is None:
             return None
@@ -82,29 +87,29 @@ class MiniRedis:
 
     def delete(self, key: str) -> int:
         """키를 삭제한다. 삭제했으면 1, 없는 키면 0을 반환한다."""
-        self._remove_expired_entries(self._clock())
+        self._remove_expired_entries(self._current_time())
         deleted = self._delete_entry(key)
         self._rebuild_expiration_heap_if_needed()
         return int(deleted)
 
     def exists(self, key: str) -> int:
         """키가 있으면 1, 없으면 0을 반환한다. 값의 내용은 판단하지 않는다."""
-        self._remove_expired_entries(self._clock())
+        self._remove_expired_entries(self._current_time())
         return int(self._entries.contains(key))
 
     def dbsize(self) -> int:
         """현재 저장된 키 수를 반환한다."""
-        self._remove_expired_entries(self._clock())
+        self._remove_expired_entries(self._current_time())
         return self._entries.size()
 
     def keys(self) -> List[str]:
         """전체 키의 별도 목록을 반환한다. 정렬과 패턴 검색은 하지 않는다."""
-        self._remove_expired_entries(self._clock())
+        self._remove_expired_entries(self._current_time())
         return self._entries.keys()
 
     def expire(self, key: str, seconds: int) -> int:
         """정수 초 뒤에 만료시킨다. 0 이하는 즉시 삭제하며 LRU는 바꾸지 않는다."""
-        now = self._clock()
+        now = self._current_time()
         self._remove_expired_entries(now)
         if isinstance(seconds, bool) or not isinstance(seconds, int):
             raise ValueError(INVALID_EXPIRATION_ERROR)
@@ -121,7 +126,7 @@ class MiniRedis:
 
     def ttl(self, key: str) -> int:
         """없는 키는 -2, 무기한 키는 -1, 나머지는 남은 초를 내림해 반환한다."""
-        now = self._clock()
+        now = self._current_time()
         self._remove_expired_entries(now)
         entry = self._entries.get(key)
         if entry is None:
@@ -132,7 +137,7 @@ class MiniRedis:
 
     def config_set_maxmemory(self, maxmemory: int) -> None:
         """메모리 제한을 바꾼다. 축출은 다음 성공한 SET에서 수행한다."""
-        self._remove_expired_entries(self._clock())
+        self._remove_expired_entries(self._current_time())
         if (
             isinstance(maxmemory, bool)
             or not isinstance(maxmemory, int)
@@ -143,7 +148,7 @@ class MiniRedis:
 
     def info_memory(self) -> str:
         """사용량, 제한과 LRU 축출 횟수를 줄별로 반환한다."""
-        self._remove_expired_entries(self._clock())
+        self._remove_expired_entries(self._current_time())
         return (
             f"used_memory:{self.used_memory}\n"
             f"maxmemory:{self.maxmemory}\n"
@@ -161,7 +166,7 @@ class MiniRedis:
             self._delete_entry(oldest_node.data)
             self.evicted_keys += 1
 
-    def _remove_expired_entries(self, now: float) -> None:
+    def _remove_expired_entries(self, now: Fraction) -> None:
         """기한이 지난 힙 기록을 꺼내 현재 만료 설정과 일치하는 키만 삭제한다."""
         while True:
             expiration = self._expiration_heap.peek()
@@ -185,10 +190,14 @@ class MiniRedis:
         if self._expiration_heap.size() <= key_count * TTL_HEAP_REBUILD_FACTOR:
             return
         expiration_heap = MinHeap()
-        for key in self._entries.keys():
+        # LRU에는 살아 있는 키만 있으므로 남아 있는 빈 버킷은 순회하지 않는다.
+        node = self._lru.head
+        while node is not None:
+            key = node.data
             entry = self._entries.get(key)
             if entry.expire_at is not None:
                 expiration_heap.push((entry.expire_at, key))
+            node = node.next
         self._expiration_heap = expiration_heap
 
     def _delete_entry(self, key: str) -> bool:

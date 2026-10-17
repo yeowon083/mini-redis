@@ -75,7 +75,7 @@ class HashMap:
         return self._find_node(bucket, key) is not None
 
     def keys(self) -> List[str]:
-        """전체 키를 반환한다. 순서는 보장하지 않는다."""
+        """전체 버킷과 키를 O(B+n)에 순회한다. 삭제해도 버킷은 줄이지 않는다."""
         result = []
         for bucket in self._buckets:
             node = bucket.head
