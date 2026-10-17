@@ -5,8 +5,8 @@ Python 3.8 이상을 대상으로 하며 외부 패키지 설치는 필요하지
 
 ## 현재 상태
 
-Phase 2: 이중 연결 리스트, 체이닝 해시맵, 최소 힙을 구현했습니다.
-현재 실행하면 준비 상태를 출력하고 종료합니다. 저장소와 CLI 명령은 이후 Phase에서 구현합니다.
+Phase 3: 기본 자료구조와 String 저장소 API를 구현했습니다.
+현재 모듈을 실행하면 준비 상태를 출력하고 종료합니다. CLI 명령 입력은 Phase 6에서 연결합니다.
 
 저장소 루트에서 실행합니다.
 
@@ -41,6 +41,33 @@ python -m unittest discover -s tests -v
 
 빈 리스트의 앞뒤 삭제, 없는 해시맵 키 조회·삭제, 빈 힙 조회·삭제는 `None`을 반환합니다.
 해시맵에는 없는 값과 구분하기 위해 `None`을 저장할 수 없습니다.
+
+## 저장소 API
+
+`mini_redis.store.MiniRedis`는 문자열 키와 값을 받습니다.
+아직 CLI 입력은 연결하지 않았으며 Python 코드에서 사용할 수 있습니다.
+
+```python
+from mini_redis.store import MiniRedis
+
+store = MiniRedis()
+store.set("user:1", "Alice")
+print(store.get("user:1"))  # Alice
+print(store.used_memory)   # 11 (키 6바이트 + 값 5바이트)
+```
+
+| 명령 | 메서드 | 반환값 |
+| --- | --- | --- |
+| SET | `set(key, value)` | 없음 |
+| GET | `get(key)` | 문자열, 없는 키는 `None` |
+| DEL | `delete(key)` | 삭제 1, 없는 키 0 |
+| EXISTS | `exists(key)` | 존재 1, 없는 키 0 |
+| DBSIZE | `dbsize()` | 키 수 |
+| KEYS | `keys()` | 전체 키 목록, 순서 보장 없음 |
+
+`used_memory`는 키와 값의 UTF-8 바이트 수 합계입니다. 자료구조 오버헤드는 제외합니다.
+덮어쓰기는 키 수를 유지하며, 삭제는 같은 경로에서 데이터와 사용량을 함께 갱신합니다.
+LRU와 메모리 제한은 Phase 4, TTL은 Phase 5에서 추가합니다.
 
 ## 개발 원칙
 
